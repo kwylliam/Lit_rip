@@ -27,9 +27,9 @@ if [ -f "$lit_rip_dir/.portable-bundle" ]; then
 fi
 
 lit_rip_log="$lit_rip_dir/.lit-rip-launcher.log"
-lit_rip_python="$lit_rip_dir/.venv-desktop/bin/python"
+lit_rip_python="$lit_rip_dir/.venv/bin/python"
 if [ ! -x "$lit_rip_python" ]; then
-    lit_rip_python="$lit_rip_dir/.venv/bin/python"
+    lit_rip_python="$lit_rip_dir/.venv-desktop/bin/python"
 fi
 
 lit_rip_error() {
@@ -41,12 +41,12 @@ lit_rip_error() {
 }
 
 if [ ! -x "$lit_rip_python" ]; then
-    lit_rip_error "The Python environment is missing. See the Linux Mint desktop launcher setup in $lit_rip_dir/README.md."
+    lit_rip_error "The Python environment is missing. See the source checkout setup in $lit_rip_dir/README.md."
 fi
 
 # A Flatpak-created environment can exist yet be unusable on the host.
 if ! "$lit_rip_python" -c 'import lit_rip.cli; import lit_rip.web' >> "$lit_rip_log" 2>&1; then
-    lit_rip_error "The app's Python dependencies could not load. See the Linux Mint desktop launcher setup in $lit_rip_dir/README.md. Details are in $lit_rip_log."
+    lit_rip_error "The app's Python dependencies could not load. See the source checkout setup in $lit_rip_dir/README.md. Details are in $lit_rip_log."
 fi
 
 exec "$lit_rip_python" -m lit_rip gui "$@" >> "$lit_rip_log" 2>&1

@@ -11,9 +11,28 @@ if [ -f /.flatpak-info ]; then
 fi
 
 cd -- "$lit_rip_root"
-lit_rip_python="$lit_rip_root/.venv-desktop/bin/python"
+if [ -n "${LIT_RIP_PYTHON:-}" ]; then
+    lit_rip_python=$LIT_RIP_PYTHON
+    if [ ! -x "$lit_rip_python" ]; then
+        printf 'Configured Python build environment is missing: %s\n' "$lit_rip_python" >&2
+        exit 1
+    fi
+else
+    for lit_rip_candidate in \
+        "$lit_rip_root/.venv/bin/python" \
+        "$lit_rip_root/.venv-desktop/bin/python"; do
+        if [ -x "$lit_rip_candidate" ] && \
+            "$lit_rip_candidate" -m PyInstaller --version >/dev/null 2>&1; then
+            lit_rip_python=$lit_rip_candidate
+            break
+        fi
+    done
+fi
+if [ -z "${lit_rip_python:-}" ]; then
+    lit_rip_python="$lit_rip_root/.venv/bin/python"
+fi
 if [ ! -x "$lit_rip_python" ]; then
-    printf 'Missing Linux Mint build environment: %s\n' "$lit_rip_python" >&2
+    printf 'Missing Python build environment: %s\n' "$lit_rip_python" >&2
     exit 1
 fi
 if ! "$lit_rip_python" -m PyInstaller --version >/dev/null 2>&1; then

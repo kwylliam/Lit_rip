@@ -4,20 +4,22 @@ A small Python app with a browser interface and command-line tools that saves pu
 
 ## Portable Linux bundle
 
-The release folder `dist/lit-rip-linux-x86_64-v0.2.0/` and archive `dist/lit-rip-linux-x86_64-v0.2.0.tar.gz` include Python and all required packages. You can transfer the archive to a comparable 64-bit Linux computer, extract it, and run its `launch-lit-rip.sh`. You do not need to recreate a virtual environment on the destination. Keep the entire folder together. See [PORTABLE.md](PORTABLE.md) for the transfer steps and compatibility limits.
+The repository includes a [portable Linux archive](dist/lit-rip-linux-x86_64-v0.2.0.tar.gz) containing Python and all required packages. Transfer the archive to a compatible 64-bit Linux computer, extract it, and run its `launch-lit-rip.sh`. You do not need to recreate a virtual environment on the destination. Keep the extracted folder together. See [PORTABLE.md](PORTABLE.md) for the transfer steps and compatibility limits.
 
-To rebuild the archive on Linux Mint after code changes:
+To rebuild the archive after code changes on a 64-bit Linux system:
 
 ```sh
-.venv-desktop/bin/python -m pip install "pyinstaller>=6,<7"
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/python -m pip install "pyinstaller>=6,<7"
 ./scripts/build-portable-linux.sh
 ```
 
-The build script refuses to overwrite an existing release. Move the previous `dist/lit-rip-linux-x86_64-v0.2.0/` folder and archive before rebuilding. Build on the oldest Linux distribution you intend to support; Linux system libraries are not bundled in full.
+The build script refuses to overwrite an existing release. Move the previous versioned folder and archive before rebuilding. Build on the oldest Linux distribution you intend to support; Linux system libraries are not bundled in full. Set `LIT_RIP_PYTHON` if you want the script to use a different Python environment.
 
 ## Setup
 
-From this folder:
+From a clone of this repository:
 
 ```sh
 python3 -m venv .venv
@@ -25,7 +27,7 @@ python3 -m venv .venv
 python -m pip install -e '.[dev]'
 ```
 
-The virtual environment is already installed in this workspace. You can also run `.venv/bin/lit-rip` without activating it.
+You can also run `.venv/bin/lit-rip` without activating the environment.
 
 ## Browser app
 
@@ -48,30 +50,30 @@ Open the exact address printed in the terminal. The server listens only on `127.
 
 Downloads run one at a time. The app keeps at most three prepared files in memory; links expire after 30 minutes or when the server stops. Save your file before then. If a download fails, the page displays the error and lets you try again.
 
-## Linux Mint desktop launcher
+## Desktop launcher on Linux
 
-Use the executable `launch-lit-rip.sh` script as your desktop launcher's command:
+Use the executable `launch-lit-rip.sh` script as your desktop launcher's command. Select the copy inside your cloned project; do not copy the script away from the project files.
 
 ```text
-/home/kamau/Documents/SMT/Lit_rip/launch-lit-rip.sh
+/path/to/Lit_rip/launch-lit-rip.sh
 ```
 
 Set the launcher name to **Lit Rip** and type to **Application** (not “Application in Terminal”), or leave **Run in terminal** unchecked. No working directory or virtual-environment activation is needed. The script opens the browser app and keeps its local server running without a terminal window.
 
-The launcher uses `.venv-desktop`, created with Linux Mint's Python. This is separate from `.venv`, which was created inside VSCodium's Flatpak runtime. It also switches to the host automatically when started from a Flatpak editor. The desktop environment is already installed in this workspace.
+For a source checkout, the launcher uses `.venv` first and falls back to `.venv-desktop` for compatibility with older checkouts. It also switches to the host automatically when started from a Flatpak editor.
 
-To recreate it, run these commands in **Linux Mint's Terminal**, from the project folder:
+To create the source environment, run these commands from the project folder:
 
 ```sh
-python3 -m venv --without-pip .venv-desktop
-python3 -m pip --python .venv-desktop/bin/python install pip -e .
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
 ```
 
-These commands use the host's existing pip to install into the virtual environment; no system packages are modified. If `.venv-desktop` does not exist, the launcher will try `.venv` and check that the app's dependencies load before starting.
+These commands install the app into the project-local virtual environment; no system packages are modified. The launcher checks that the app's dependencies load before starting.
 
-Startup output and errors go to `.lit-rip-launcher.log` in the project folder. Closing the browser tab does not stop the server. Each launch starts a new server on an available port.
+For a source checkout, startup output and errors go to `.lit-rip-launcher.log` in the project folder. Closing the browser tab does not stop the server. Each launch starts a new server on an available port.
 
-If you move this project, update the command in your desktop launcher to the script's new location.
+If you move the project, update the command in your desktop launcher to the script's new location.
 
 ## Command-line usage
 
@@ -155,4 +157,4 @@ python -m pip check
 
 Tests use synthetic, non-explicit story pages and do not contact the website. They cover URL validation across all three sites, single-story versus series scope, old and new Literotica pagination layouts, chapter ordering, missing/repeated pages, Markdown and plain-text formatting, CLI errors, protection against accidental overwrites, HTTP attachment downloads, background job errors, local browser request validation, search metadata and pagination, invalid search responses, and CLI search output.
 
-Live smoke tests successfully downloaded the supplied two-chapter Literotica series, a public StoriesOnline story, and a public MCStories story. A 48-chapter MCStories index was checked for chapter order, and its first two chapter bodies were extracted. Downloaded files and the virtual environment are excluded by `.gitignore`.
+Downloaded files and virtual environments are excluded by `.gitignore`.
