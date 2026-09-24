@@ -4,7 +4,7 @@ A small Python app with a browser interface and command-line tools that saves pu
 
 ## Portable Linux bundle
 
-The repository includes a [portable Linux archive](dist/lit-rip-linux-x86_64-v0.2.0.tar.gz) containing Python and all required packages. Transfer the archive to a compatible 64-bit Linux computer, extract it, and run its `launch-lit-rip.sh`. You do not need to recreate a virtual environment on the destination. Keep the extracted folder together. See [PORTABLE.md](PORTABLE.md) for the transfer steps and compatibility limits.
+The repository includes a [portable Linux archive](dist/lit-rip-linux-x86_64-v0.2.2.tar.gz) containing Python and all required packages. Transfer the archive to a compatible 64-bit Linux computer, extract it, and run the `launch-lit-rip.sh` inside the extracted bundle. You do not need to recreate a virtual environment on the destination. Keep the extracted folder together. The `launch-lit-rip.sh` at the source-project root is for a checkout with `.venv` or `.venv-desktop`; it is not the portable launcher. See [PORTABLE.md](PORTABLE.md) for the transfer steps and compatibility limits.
 
 To rebuild the archive after code changes on a 64-bit Linux system:
 
@@ -25,6 +25,14 @@ From a clone of this repository:
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e '.[dev]'
+```
+
+Installing `python3-venv` only provides the virtual-environment support; the final `pip install` step installs Lit Rip and its dependencies. You can also perform the setup without activating the environment:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+./launch-lit-rip.sh
 ```
 
 You can also run `.venv/bin/lit-rip` without activating the environment.

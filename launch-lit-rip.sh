@@ -27,10 +27,16 @@ if [ -f "$lit_rip_dir/.portable-bundle" ]; then
 fi
 
 lit_rip_log="$lit_rip_dir/.lit-rip-launcher.log"
-lit_rip_python="$lit_rip_dir/.venv/bin/python"
-if [ ! -x "$lit_rip_python" ]; then
-    lit_rip_python="$lit_rip_dir/.venv-desktop/bin/python"
-fi
+lit_rip_python=""
+for lit_rip_candidate in \
+    "$lit_rip_dir/.venv/bin/python" \
+    "$lit_rip_dir/.venv-desktop/bin/python"; do
+    if [ -x "$lit_rip_candidate" ] && \
+        "$lit_rip_candidate" -c 'import lit_rip.cli; import lit_rip.web' >/dev/null 2>&1; then
+        lit_rip_python="$lit_rip_candidate"
+        break
+    fi
+done
 
 lit_rip_error() {
     printf '%s\n' "$1" >&2
@@ -40,12 +46,24 @@ lit_rip_error() {
     exit 1
 }
 
-if [ ! -x "$lit_rip_python" ]; then
-    lit_rip_error "The Python environment is missing. See the source checkout setup in $lit_rip_dir/README.md."
+lit_rip_portable_hint() {
+    find "$lit_rip_dir/dist" -maxdepth 1 -type f -name 'lit-rip-linux-x86_64-v*.tar.gz' -print 2>/dev/null | sort -V | tail -n 1
+}
+
+if [ -z "$lit_rip_python" ]; then
+    lit_rip_portable_archive=$(lit_rip_portable_hint)
+    if [ -n "$lit_rip_portable_archive" ]; then
+        lit_rip_error "This is the source-checkout launcher, but its Python environment is missing. Extract the portable bundle at $lit_rip_portable_archive and run the launch-lit-rip.sh inside the extracted folder."
+    fi
+    lit_rip_error "The source checkout's Python environment is missing or its dependencies are not installed. Run: $lit_rip_dir/.venv/bin/python -m pip install -e $lit_rip_dir. Or run the portable bundle's launch-lit-rip.sh."
 fi
 
 # A Flatpak-created environment can exist yet be unusable on the host.
 if ! "$lit_rip_python" -c 'import lit_rip.cli; import lit_rip.web' >> "$lit_rip_log" 2>&1; then
+    lit_rip_portable_archive=$(lit_rip_portable_hint)
+    if [ -n "$lit_rip_portable_archive" ]; then
+        lit_rip_error "The source checkout's Python environment could not load. Extract the portable bundle at $lit_rip_portable_archive and run the launch-lit-rip.sh inside the extracted folder. Details are in $lit_rip_log."
+    fi
     lit_rip_error "The app's Python dependencies could not load. See the source checkout setup in $lit_rip_dir/README.md. Details are in $lit_rip_log."
 fi
 
