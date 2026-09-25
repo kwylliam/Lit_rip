@@ -5,15 +5,15 @@ set -eu
 lit_rip_script=$(readlink -f -- "$0")
 lit_rip_dir=$(dirname -- "$lit_rip_script")
 
-if [ -f /.flatpak-info ]; then
-    exec flatpak-spawn --host "$lit_rip_script" "$@"
-fi
-
 cd -- "$lit_rip_dir"
 
 # A portable release includes its own interpreter and Python dependencies.
 lit_rip_bundle="$lit_rip_dir/app/lit-rip/lit-rip"
 if [ -f "$lit_rip_dir/.portable-bundle" ]; then
+    # The bundled binary belongs on the host, outside the editor sandbox.
+    if [ -f /.flatpak-info ]; then
+        exec flatpak-spawn --host "$lit_rip_script" "$@"
+    fi
     if [ ! -x "$lit_rip_bundle" ]; then
         printf 'Lit Rip bundle is incomplete or not executable: %s\n' "$lit_rip_bundle" >&2
         if command -v zenity >/dev/null 2>&1; then
@@ -37,6 +37,13 @@ for lit_rip_candidate in \
         break
     fi
 done
+
+# A source environment created inside a Flatpak may use a different Python
+# version from the host. Prefer a working local environment; only retry on
+# the host when the local checkout cannot load the app.
+if [ -z "$lit_rip_python" ] && [ -f /.flatpak-info ] && command -v flatpak-spawn >/dev/null 2>&1; then
+    exec flatpak-spawn --host "$lit_rip_script" "$@"
+fi
 
 lit_rip_error() {
     printf '%s\n' "$1" >&2

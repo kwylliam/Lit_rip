@@ -159,11 +159,20 @@ def test_expired_results_are_removed(server):
 
 def test_gui_command(monkeypatch):
     calls = []
-    monkeypatch.setattr("lit_rip.web.serve", lambda port, open_browser: calls.append((port, open_browser)) or 0)
+    monkeypatch.setattr("lit_rip.web.serve", lambda **kwargs: calls.append(kwargs) or 0)
     assert cli.main(["gui", "--port", "8899", "--no-browser"]) == 0
-    assert calls == [(8899, False)]
+    assert calls == [{"port": 8899, "host": "127.0.0.1", "public_host": None,
+                      "allowed_hosts": None, "open_browser": False}]
     with pytest.raises(SystemExit):
         cli.main(["gui", "--port", "70000"])
+
+
+def test_network_server_accepts_configured_host():
+    with BrowserServer(host="0.0.0.0", public_host="nas.example",
+                       allowed_hosts="nas.example:8899") as instance:
+        assert instance.public_host == "nas.example"
+        assert instance.host_allowed("nas.example:8899")
+        assert not instance.host_allowed("evil.example:8899")
 
 
 def test_search_endpoint(server):

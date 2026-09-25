@@ -35,7 +35,7 @@
                 <input id="url" name="url" type="text" inputmode="url" required maxlength="2048" placeholder="https://www.literotica.com/s/…" autocomplete="off" spellcheck="false" aria-describedby="url-help">
                 <span id="source-status" class="source-status" role="status" aria-live="polite" hidden></span>
               </div>
-              <p class="help" id="url-help">Paste a link from Literotica, StoriesOnline, or MCStories.</p>
+              <p class="help" id="url-help">Paste a link from Literotica, StoriesOnline, MCStories, or SexStories.</p>
 
               <fieldset id="scope-group" class="scope-group" hidden>
                 <legend class="field-label">Download</legend>
@@ -58,6 +58,14 @@
         <section id="title-search" class="input-panel search-panel" role="tabpanel" aria-labelledby="title-mode" hidden>
           <form id="search-form">
             <fieldset id="search-fields">
+              <label class="field-label" for="search-site">Search in</label>
+              <select id="search-site" class="search-site">
+                <option value="all" selected>All four sites</option>
+                <option value="literotica">Literotica</option>
+                <option value="storiesonline">StoriesOnline</option>
+                <option value="mcstories">MCStories</option>
+                <option value="sexstories">SexStories</option>
+              </select>
               <label class="field-label" for="query">Story title</label>
               <div class="search-row"><input id="query" type="text" required minlength="2" maxlength="200" placeholder="Search by title or a few words…" autocomplete="off"><button class="secondary search-submit" type="submit">Search</button></div>
             </fieldset>

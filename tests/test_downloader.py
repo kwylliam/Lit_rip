@@ -1,5 +1,5 @@
 import pytest
-from lit_rip.downloader import Downloader, LiteroticaAdapter, StoriesOnlineAdapter, make_configuration, normalize_url
+from lit_rip.downloader import Downloader, LiteroticaAdapter, SexStoriesAdapter, StoriesOnlineAdapter, make_configuration, normalize_url
 from lit_rip.models import DownloadError
 
 URL = "https://www.literotica.com/s/example-ch-01"
@@ -7,12 +7,39 @@ NEXT = "https://www.literotica.com/s/example-ch-02"
 SERIES = "https://www.literotica.com/series/se/123"
 STORIESONLINE = "https://storiesonline.net/s/16269/final-reward"
 MCSTORIES = "https://mcstories.com/AToZeb/index.html"
+SEXSTORIES = "https://sexstories.com/story/115518/backseat_sister"
 
 
 def page(text, links="", nav_class="panel _pagination_example"):
     return (f'<h1>Example Chapter</h1><a class="_author__title_demo" href="/authors/example">Test Author</a>'
             f'<aside>Advertisement</aside><div class="_article__content_demo"><div><p>{text}</p></div></div>'
             f'<nav class="{nav_class}">{links}</nav><section id="comments">A comment</section>')
+
+
+def sexstories_page(text="Story text."):
+    return ('''<div id="story_center_panel">
+        <div id="top_panel"><div class="story_info"><h2>Example Story <span class="title_link">by <a href="/profile123/TestAuthor">Test Author</a></span></h2></div></div>
+        <div class="block_panel"><h2>Introduction:</h2>Summary only.</div>
+        <div class="block_panel"><p>''' + text + '''</p><script>bad()</script></div>
+        <div class="block_panel"><div class="count_comments">1 comment</div><form>Comment</form></div>
+    </div>''')
+
+
+def sexstories_series_page(title, text="Story text."):
+    return ('''<div id="story_center_panel">
+        <div id="top_panel"><div class="story_info"><h2>''' + title + ''' <span class="title_link">by <a href="/profile123/TestAuthor">Test Author</a></span></h2></div></div>
+        <div class="block_panel"><h2>Introduction:</h2>Summary only.</div>
+        <div class="block_panel"><p>''' + text + '''</p></div>
+        <div class="block_panel"><div class="count_comments">0 comments</div></div>
+    </div>''')
+
+
+def sexstories_author_page():
+    return '''<table>
+        <tr><td><a href="/story/21/">Example Saga - Part 02 Second</a></td></tr>
+        <tr><td><a href="/story/20/">Example Saga - Part 01 First</a></td></tr>
+        <tr><td><a href="/story/99/">Another Story</a></td></tr>
+    </table>'''
 
 
 @pytest.mark.parametrize("value", [URL + "?page=3#top", URL.replace("https://www.", ""), URL + "/"])
@@ -33,6 +60,9 @@ def test_rejects_unsupported_urls(value):
     ("https://www.storiesonline.net/n/1234/example/2", "https://storiesonline.net/n/1234/example/2"),
     ("mcstories.com/AToZeb/", "https://mcstories.com/AToZeb/"),
     ("https://www.mcstories.com/AToZeb/index.html#top", MCSTORIES),
+    ("www.sexstories.com/story/115518/backseat_sister?ref=1#top", SEXSTORIES),
+    ("https://sexstories.com/story/111809/", "https://sexstories.com/story/111809/"),
+    ("https://sexstories.com/story/83448/_quot_my_halloween_party_at_the_mortuary_quot_", "https://sexstories.com/story/83448/_quot_my_halloween_party_at_the_mortuary_quot_"),
 ])
 def test_other_site_urls(value, expected):
     assert normalize_url(value) == expected
@@ -42,6 +72,7 @@ def test_other_site_urls(value, expected):
     "https://storiesonline.net/authors/1234", "https://storiesonline.net/s/not-an-id/story",
     "https://mcstories.com/Titles.html", "https://mcstories.com/Tags/story.html",
     "https://mcstories.com.evil.example/AToZeb/index.html",
+    "https://sexstories.com/story/not-an-id/story-title", "https://sexstories.com.evil.example/story/1/title",
 ])
 def test_rejects_nonstory_site_urls(value):
     with pytest.raises(DownloadError):
@@ -51,9 +82,75 @@ def test_rejects_nonstory_site_urls(value):
 def test_site_selection_and_series_scope():
     assert isinstance(Downloader(STORIESONLINE).adapter, StoriesOnlineAdapter)
     assert Downloader(MCSTORIES).adapter.__class__.__name__ == "MCStoriesComSiteAdapter"
+    assert isinstance(Downloader(SEXSTORIES).adapter, SexStoriesAdapter)
     for url in (STORIESONLINE, MCSTORIES):
         with pytest.raises(DownloadError, match="whole-series option applies to Literotica"):
             Downloader(url, series=True)
+    with pytest.raises(DownloadError, match="single-page submissions"):
+        Downloader(SEXSTORIES, series=True)
+
+
+def test_sexstories_metadata_and_body(monkeypatch):
+    downloader = Downloader(SEXSTORIES)
+    monkeypatch.setattr(downloader.adapter, "get_request", lambda url: sexstories_page())
+    metadata = downloader.inspect()
+    assert metadata.title == "Example Story"
+    assert metadata.author == "Test Author"
+    assert metadata.chapters[0].url == SEXSTORIES
+    story = downloader.download()
+    assert "Story text." in story.chapters[0].html
+    assert "Summary only." not in story.chapters[0].html
+    assert "bad()" not in story.chapters[0].html
+    assert "Comment" not in story.chapters[0].html
+
+
+def test_sexstories_detects_numbered_parts_from_author_page(monkeypatch):
+    url = "https://sexstories.com/story/21/"
+    downloader = Downloader(url)
+    responses = {
+        url: sexstories_series_page("Example Saga - Part 02 Second"),
+        "https://sexstories.com/profile123/TestAuthor": sexstories_author_page(),
+    }
+    monkeypatch.setattr(downloader.adapter, "get_request", responses.__getitem__)
+    story = downloader.inspect()
+    assert [(chapter.title, chapter.url) for chapter in story.chapters] == [
+        ("Example Saga - Part 01 First", "https://sexstories.com/story/20/"),
+        ("Example Saga - Part 02 Second", url),
+    ]
+
+
+def test_sexstories_detects_pt_parts_from_author_page(monkeypatch):
+    url = "https://sexstories.com/story/31/"
+    downloader = Downloader(url)
+    responses = {
+        url: sexstories_series_page("Example Saga Pt. 02 Second"),
+        "https://sexstories.com/profile123/TestAuthor": '''<table>
+            <tr><td><a href="/story/30/">Example Saga Pt.01 First</a></td></tr>
+            <tr><td><a href="/story/31/">Example Saga Pt. 02 Second</a></td></tr>
+        </table>''',
+    }
+    monkeypatch.setattr(downloader.adapter, "get_request", responses.__getitem__)
+    story = downloader.inspect()
+    assert [chapter.title for chapter in story.chapters] == [
+        "Example Saga Pt.01 First", "Example Saga Pt. 02 Second",
+    ]
+
+
+def test_sexstories_detects_word_numbered_parts_from_author_page(monkeypatch):
+    url = "https://sexstories.com/story/41/"
+    downloader = Downloader(url)
+    responses = {
+        url: sexstories_series_page("Example Saga Part Ten(1)"),
+        "https://sexstories.com/profile123/TestAuthor": '''<table>
+            <tr><td><a href="/story/40/">Example Saga Part Nine</a></td></tr>
+            <tr><td><a href="/story/41/">Example Saga Part Ten(1)</a></td></tr>
+        </table>''',
+    }
+    monkeypatch.setattr(downloader.adapter, "get_request", responses.__getitem__)
+    story = downloader.inspect()
+    assert [chapter.title for chapter in story.chapters] == [
+        "Example Saga Part Nine", "Example Saga Part Ten(1)",
+    ]
 
 
 def test_storiesonline_public_login_navigation_is_not_a_wall():

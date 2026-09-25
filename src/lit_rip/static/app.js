@@ -57,11 +57,12 @@ function updateSeriesOption() {
   const literotica = host === "literotica.com" || host.endsWith(".literotica.com");
   const storiesOnline = host === "storiesonline.net" || host === "www.storiesonline.net";
   const mcStories = host === "mcstories.com" || host === "www.mcstories.com";
+  const sexStories = host === "sexstories.com" || host === "www.sexstories.com";
 
-  sourceStatus.hidden = !(literotica || storiesOnline || mcStories);
-  sourceStatus.textContent = literotica ? "✓ Literotica" : storiesOnline ? "✓ StoriesOnline" : mcStories ? "✓ MCStories" : "";
+  sourceStatus.hidden = !(literotica || storiesOnline || mcStories || sexStories);
+  sourceStatus.textContent = literotica ? "✓ Literotica" : storiesOnline ? "✓ StoriesOnline" : mcStories ? "✓ MCStories" : sexStories ? "✓ SexStories" : "";
   scopeGroup.hidden = !literotica;
-  scopeNote.hidden = !(storiesOnline || mcStories);
+  scopeNote.hidden = !(storiesOnline || mcStories || sexStories);
   seriesField.disabled = !literotica;
   if (!literotica) {
     seriesField.checked = false;
@@ -243,7 +244,7 @@ startOver.addEventListener("click", () => {
   progress.hidden = true;
   setMode("link");
   urlField.value = "";
-  document.querySelector("#url-help").textContent = "Paste a link from Literotica, StoriesOnline, or MCStories.";
+  document.querySelector("#url-help").textContent = "Paste a link from Literotica, StoriesOnline, MCStories, or SexStories.";
   seriesField.checked = false;
   singleStoryField.checked = true;
   updateSeriesOption();
@@ -254,6 +255,7 @@ try { jobId = sessionStorage.getItem("lit-rip-job"); } catch (_) { /* Optional. 
 if (jobId) poll();
 
 const searchForm = document.querySelector("#search-form");
+const searchSite = document.querySelector("#search-site");
 const searchStatus = document.querySelector("#search-status");
 const searchResults = document.querySelector("#search-results");
 const searchPagination = document.querySelector("#search-pagination");
@@ -264,8 +266,9 @@ let searchPage = 1;
 
 function useResult(item, wholeSeries) {
   urlField.value = wholeSeries ? item.series_url : item.url;
-  seriesField.checked = wholeSeries;
-  singleStoryField.checked = !wholeSeries;
+  const literoticaSeries = wholeSeries && item.site === "literotica";
+  seriesField.checked = literoticaSeries;
+  singleStoryField.checked = !literoticaSeries;
   updateSeriesOption();
   document.querySelector("#url-help").textContent = `Selected: ${wholeSeries ? (item.series_title || item.title) : item.title} — ${item.author}`;
   setMode("link");
@@ -280,7 +283,10 @@ function resultElement(item) {
   heading.textContent = item.title;
   const byline = document.createElement("p");
   byline.textContent = `By ${item.author}`;
-  row.append(heading, byline);
+  const site = document.createElement("p");
+  site.className = "result-site";
+  site.textContent = {literotica: "Literotica", storiesonline: "StoriesOnline", mcstories: "MCStories", sexstories: "SexStories"}[item.site] || "";
+  row.append(heading, byline, site);
   if (item.series_url) {
     const series = document.createElement("p");
     series.className = "result-series";
@@ -318,11 +324,12 @@ async function search(query, pageNumber = 1) {
   searchBusy = true;
   updateSearchControls();
   searchStatus.classList.remove("error");
-  searchStatus.textContent = "Searching Literotica…";
+  const siteName = {all: "all four sites", literotica: "Literotica", storiesonline: "StoriesOnline", mcstories: "MCStories", sexstories: "SexStories"}[searchSite.value];
+  searchStatus.textContent = `Searching ${siteName}…`;
   try {
     const result = await request("/api/search", {method: "POST",
       headers: {"Content-Type": "application/json", "X-Lit-Rip-Token": token},
-      body: JSON.stringify({query, page: pageNumber})}, 60000);
+      body: JSON.stringify({query, page: pageNumber, site: searchSite.value})}, 60000);
     searchQuery = result.query;
     searchPage = result.page;
     searchResults.replaceChildren(...result.results.map(resultElement));

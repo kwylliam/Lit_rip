@@ -7,9 +7,11 @@ from importlib.resources import files
 from urllib.parse import parse_qs, urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
+from fanficfare import exceptions as fff_exceptions
 from fanficfare.adapters.adapter_literotica import LANG_LIST, LiteroticaSiteAdapter
 from fanficfare.adapters.adapter_storiesonlinenet import StoriesOnlineNetAdapter
 from fanficfare.adapters.adapter_mcstoriescom import MCStoriesComSiteAdapter
+from fanficfare.adapters.base_adapter import BaseSiteAdapter
 from fanficfare.configurable import Configuration
 
 from .models import Chapter, DownloadError, Story
@@ -47,8 +49,17 @@ def normalize_url(value: str) -> str:
             raise DownloadError("Expected an MCStories /StoryTitle/ or /StoryTitle/index.html URL.")
         if path.count("/") == 1:
             path += "/"
+    elif host in ("sexstories.com", "www.sexstories.com"):
+        host = "sexstories.com"
+        path = path.rstrip("/")
+        if re.fullmatch(r"/story/[0-9]+", path):
+            # Author pages link to the short form, which only works with a
+            # trailing slash on the site.
+            path += "/"
+        elif not re.fullmatch(r"/story/[0-9]+/[A-Za-z0-9._%+~\-][A-Za-z0-9._%+~\-]*", path):
+            raise DownloadError("Expected a SexStories /story/12345/story-title URL.")
     else:
-        raise DownloadError("Supported sites: Literotica, StoriesOnline, and MCStories.")
+        raise DownloadError("Supported sites: Literotica, StoriesOnline, MCStories, and SexStories.")
     return urlunsplit(("https", host, path, "", ""))
 
 
@@ -159,6 +170,144 @@ class StoriesOnlineAdapter(StoriesOnlineNetAdapter):
         ))
 
 
+class SexStoriesAdapter(BaseSiteAdapter):
+    """Read SexStories pages and infer numbered parts from the author page."""
+
+    _SERIES_PATTERNS = (
+        re.compile(r"^(?P<base>.+?)\s*[-–—]?\s*Part\s+(?P<number>[0-9]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s*(?:\([0-9]+\))?(?=$|\s|[:._-])", re.IGNORECASE),
+        re.compile(r"^(?P<base>.+?)\s*[-–—]\s*Chapter\s+(?P<number>[0-9]+)\b", re.IGNORECASE),
+        re.compile(r"^(?P<base>.+?)\s*[-–—]?\s*Pt\.?\s*(?P<number>[0-9]+)\b", re.IGNORECASE),
+        re.compile(r"^(?P<base>.+?)\s+Ch\.\s*(?P<number>[0-9]+)\b", re.IGNORECASE),
+    )
+
+    _NUMBER_WORDS = {
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+        "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+        "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+        "nineteen": 19, "twenty": 20,
+    }
+
+    @staticmethod
+    def getSiteDomain():
+        return "sexstories.com"
+
+    @classmethod
+    def getAcceptDomains(cls):
+        return ["sexstories.com", "www.sexstories.com"]
+
+    @classmethod
+    def getSiteExampleURLs(cls):
+        return "https://sexstories.com/story/12345/story-title"
+
+    def getSiteURLPattern(self):
+        return r"https?://(www\.)?sexstories\.com/story/[0-9]+(?:/[A-Za-z0-9._%+~\-][A-Za-z0-9._%+~\-]*)?/?"
+
+    def __init__(self, config: Configuration, url: str):
+        super().__init__(config, url)
+        self.story.setMetadata("siteabbrev", "sexstories")
+        self.story.setMetadata("storyId", self.parsedUrl.path.split("/")[2])
+        self._setURL(url)
+
+    @staticmethod
+    def _story_content(soup: BeautifulSoup):
+        center = soup.select_one("#story_center_panel")
+        if center is None:
+            return None
+        for panel in center.select(".block_panel"):
+            if panel.select_one("#stories_comments, .count_comments, form"):
+                continue
+            heading = panel.find("h2")
+            if heading and "introduction" in heading.get_text(" ", strip=True).lower():
+                continue
+            if panel.get_text(strip=True):
+                return panel
+        return None
+
+    @classmethod
+    def _series_key(cls, title: str):
+        for pattern in cls._SERIES_PATTERNS:
+            match = pattern.match(title.strip())
+            if match:
+                return (re.sub(r"\s+", " ", match.group("base").strip()).casefold(), pattern.pattern)
+        return None
+
+    @classmethod
+    def _series_number(cls, title: str, key):
+        for pattern in cls._SERIES_PATTERNS:
+            if pattern.pattern == key[1]:
+                match = pattern.match(title.strip())
+                if not match:
+                    return None
+                token = match.group("number").casefold()
+                return int(token) if token.isdigit() else cls._NUMBER_WORDS[token]
+        return None
+
+    def _add_author_page_chapters(self, author_url: str, title: str):
+        key = self._series_key(title)
+        if key is None:
+            self.add_chapter(title, self.url)
+            return
+
+        try:
+            profile = self.make_soup(self.get_request(author_url))
+            candidates = []
+            for link in profile.select('a[href^="/story/"]'):
+                chapter_title = link.get_text(" ", strip=True)
+                chapter_url = urljoin(author_url, link.get("href", ""))
+                if self._series_key(chapter_title) != key:
+                    continue
+                number = self._series_number(chapter_title, key)
+                if number is not None:
+                    candidates.append((number, chapter_title, chapter_url))
+            candidates.sort(key=lambda item: (item[0], item[1].casefold()))
+            seen = set()
+            for _, chapter_title, chapter_url in candidates:
+                if chapter_url not in seen:
+                    seen.add(chapter_url)
+                    self.add_chapter(chapter_title, chapter_url)
+        except Exception as exc:
+            logger.debug("Could not inspect SexStories author page %s: %s", author_url, exc)
+
+        if not self.chapterUrls:
+            self.add_chapter(title, self.url)
+
+    def extractChapterUrlsAndMetadata(self):
+        if not (self.is_adult or self.getConfig("is_adult")):
+            raise fff_exceptions.AdultCheckRequired(self.url)
+
+        data = self.get_request(self.url)
+        soup = self.make_soup(data)
+        heading = soup.select_one("#story_center_panel .story_info h2")
+        author = heading.select_one(".title_link a") if heading else None
+        content = self._story_content(soup)
+        if heading is None or author is None or content is None:
+            raise DownloadError("Story metadata or story text was not found. The page may be unavailable or its layout may have changed.")
+
+        author_name = author.get_text(" ", strip=True)
+        title_link = heading.select_one(".title_link")
+        if title_link:
+            title_link.extract()
+        title = heading.get_text(" ", strip=True)
+        if not title or not author_name:
+            raise DownloadError("Story title or author was not found. The page may be unavailable or its layout may have changed.")
+        self.story.setMetadata("title", title)
+        self.story.setMetadata("author", author_name)
+        author_url = urljoin(self.url, author.get("href", ""))
+        self.story.setMetadata("authorUrl", author_url)
+        self._add_author_page_chapters(author_url, title)
+
+    def getChapterText(self, url):
+        data = self.get_request(url)
+        soup = self.make_soup(data)
+        content = self._story_content(soup)
+        if content is None:
+            raise DownloadError("No story text was found. The page may be unavailable or its layout may have changed.")
+        for node in content.select("script, style"):
+            node.decompose()
+        return self.utf8FromSoup(url, content)
+
+
 class Downloader:
     def __init__(self, url: str, *, series: bool = False):
         self.url = normalize_url(url)
@@ -173,6 +322,10 @@ class Downloader:
             if series:
                 raise DownloadError("The whole-series option applies to Literotica URLs. MCStories story URLs already include their chapters.")
             self.adapter = MCStoriesComSiteAdapter(make_configuration(host), self.url)
+        elif host == "sexstories.com":
+            if series:
+                raise DownloadError("The whole-series option applies to Literotica URLs. SexStories story URLs are single-page submissions.")
+            self.adapter = SexStoriesAdapter(make_configuration(host), self.url)
         else:
             raise DownloadError("Unsupported story URL.")
         self._metadata: Story | None = None

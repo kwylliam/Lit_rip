@@ -1,0 +1,26 @@
+services:
+  lit-rip:
+    build:
+      context: .
+    image: lit-rip:0.2.3
+    container_name: lit-rip
+    restart: unless-stopped
+    ports:
+      - "${LIT_RIP_PORT:-9089}:8899"
+    environment:
+      LIT_RIP_HOST: "0.0.0.0"
+      LIT_RIP_PUBLIC_HOST: "${LIT_RIP_PUBLIC_HOST:-localhost}"
+      LIT_RIP_ALLOWED_HOSTS: "${LIT_RIP_ALLOWED_HOSTS:-*}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8899/', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3

@@ -5,7 +5,12 @@ import pytest
 import requests
 
 from lit_rip import cli
-from lit_rip.search import SearchClient, SearchError, SearchBusyError, parse_results, validate_search
+from lit_rip.search import (
+    SearchClient, SearchError, SearchBusyError, SearchPage, SearchResult,
+    parse_mcstories_index, parse_results, parse_storiesonline_results,
+    parse_sexstories_results,
+    validate_search, validate_site,
+)
 
 
 @pytest.fixture
@@ -59,6 +64,72 @@ def test_validation(query, page):
 
 def test_query_normalization():
     assert validate_search("  A  café\nvisit ") == ("A café visit",1)
+
+
+def test_site_validation():
+    assert validate_site(None) == "literotica"
+    assert validate_site("mcstories") == "mcstories"
+    assert validate_site("sexstories") == "sexstories"
+    with pytest.raises(ValueError):
+        validate_site("unknown")
+
+
+def test_storiesonline_result_parser():
+    html = """
+    <h4 id="smhead">Displaying stories 1 through 2 of 3</h4>
+    <div class="storyList">
+      <div class="entry"><h3 class="sname"><a href="/s/123/a-story">A Story</a> by <a href="/a/writer">Writer</a></h3></div>
+      <div class="entry"><h3 class="sname"><a href="/n/456/another-story/2">Another Story</a> by <a href="/a/other">Other</a></h3></div>
+    </div>
+    <a href="/library/search.php?p=2">2</a>
+    """
+    result = parse_storiesonline_results(html, "story", 1)
+    assert result.total == 3
+    assert result.has_more
+    assert result.results[0] == SearchResult("A Story", "Writer", "https://storiesonline.net/s/123/a-story", site="storiesonline")
+    assert result.results[1].url == "https://storiesonline.net/n/456/another-story/2"
+
+
+def test_mcstories_title_index_parser():
+    html = """
+    <table id="index">
+      <tr><td><a href="../StoryOne/index.html"><cite>The Story One</cite></a></td></tr>
+      <tr><td><a href="../Other/index.html"><cite>Something Else</cite></a></td></tr>
+      <tr><td><a href="https://evil.example/story"><cite>Bad Link</cite></a></td></tr>
+    </table>
+    """
+    result = parse_mcstories_index(html, "story one")
+    assert result == (("The Story One", "https://mcstories.com/StoryOne/index.html"),)
+
+
+def test_sexstories_keyword_parser():
+    html = """
+    <div class="pager"><a href="/search/1/relevance/story////">1</a><a href="/search/2/relevance/story////">2</a></div>
+    <ul class="stories_list">
+      <li><h4><a href="/story/123/first-story">First Story</a> by <a href="/profile1/Writer">Writer</a></h4></li>
+      <li><h4><a href="/story/456/second-story">Second Story</a> by <a href="/profile2/Other">Other</a></h4></li>
+    </ul>
+    """
+    result = parse_sexstories_results(html, "story", 1)
+    assert result == SearchPage("story", 1, 2, False, (
+        SearchResult("First Story", "Writer", "https://sexstories.com/story/123/first-story", site="sexstories"),
+        SearchResult("Second Story", "Other", "https://sexstories.com/story/456/second-story", site="sexstories"),
+    ), "sexstories")
+
+
+def test_all_site_search_combines_provider_pages():
+    class Provider:
+        def __init__(self, site):
+            self.site = site
+        def search(self, query, page):
+            return SearchPage(query, page, 1, False,
+                              (SearchResult(self.site, "Writer", "https://example.invalid/"),), self.site)
+
+    client = SearchClient({name: Provider(name) for name in ("literotica", "storiesonline", "mcstories", "sexstories")})
+    result = client.search("story", site="all")
+    assert result.site == "all"
+    assert result.total == 4
+    assert [item.title for item in result.results] == ["literotica", "storiesonline", "mcstories", "sexstories"]
 
 
 def test_api_parameters_and_user_agent(monkeypatch, response):

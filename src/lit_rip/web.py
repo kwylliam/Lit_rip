@@ -1,7 +1,8 @@
-"""Loopback-only browser interface; downloaded files stay in memory."""
+"""Browser interface; downloaded files stay in memory."""
 
 import json
 import logging
+import os
 import secrets
 import threading
 import time
@@ -105,12 +106,35 @@ class Jobs:
 class BrowserServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, port=0, *, jobs=None, search_client=None):
+    def __init__(self, port=0, *, host="127.0.0.1", public_host=None, allowed_hosts=None,
+                 jobs=None, search_client=None):
         self.jobs = jobs if jobs is not None else Jobs()
         self.search_client = search_client if search_client is not None else SearchClient()
         self.token = secrets.token_hex(32)
-        super().__init__(("127.0.0.1", port), Handler)
-        self.origin = f"http://127.0.0.1:{self.server_port}"
+        self.bind_host = host
+        self.public_host = public_host or ("127.0.0.1" if host in ("0.0.0.0", "::") else host)
+        configured_hosts = allowed_hosts if allowed_hosts is not None else os.environ.get("LIT_RIP_ALLOWED_HOSTS")
+        explicit_hosts = configured_hosts is not None
+        if isinstance(configured_hosts, str) and not configured_hosts.strip():
+            explicit_hosts = False
+        if isinstance(configured_hosts, str):
+            configured_hosts = {value.strip() for value in configured_hosts.split(",") if value.strip()}
+        elif configured_hosts is None or configured_hosts == "":
+            configured_hosts = set()
+        else:
+            configured_hosts = set(configured_hosts)
+        super().__init__((host, port), Handler)
+        self.origin = f"http://{self.public_host}:{self.server_port}"
+        if configured_hosts:
+            self.allowed_hosts = configured_hosts
+        elif explicit_hosts or host in ("0.0.0.0", "::"):
+            self.allowed_hosts = {"*"} if not configured_hosts and host in ("0.0.0.0", "::") else set()
+        else:
+            self.allowed_hosts = {f"{host}:{self.server_port}", f"localhost:{self.server_port}",
+                                  f"127.0.0.1:{self.server_port}", f"[::1]:{self.server_port}"}
+
+    def host_allowed(self, value):
+        return "*" in self.allowed_hosts or value in self.allowed_hosts
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -144,11 +168,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def _local_request(self):
         # Reject foreign websites and DNS rebinding to this local server.
-        if self.headers.get("Host") != self.server.origin.removeprefix("http://"):
+        host = self.headers.get("Host", "")
+        if not self.server.host_allowed(host):
             self._json(403, {"error": "Use the local address printed in the terminal."})
             return False
         origin = self.headers.get("Origin")
-        if (origin and origin != self.server.origin) or self.headers.get("Sec-Fetch-Site") == "cross-site":
+        parsed_origin = urlsplit(origin) if origin else None
+        if ((parsed_origin and (parsed_origin.scheme != "http" or parsed_origin.netloc != host))
+                or self.headers.get("Sec-Fetch-Site") == "cross-site"):
             self._json(403, {"error": "This app accepts requests from its own browser page only."})
             return False
         return True
@@ -210,7 +237,13 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(data, dict):
                 raise ValueError("Expected a JSON object.")
             if self.path == "/api/search":
-                result = self.server.search_client.search(data.get("query"), data.get("page", 1))
+                # Keep the two-argument call for older injected test clients;
+                # the site field is optional for API callers and defaults to
+                # the original Literotica search.
+                if "site" in data:
+                    result = self.server.search_client.search(data.get("query"), data.get("page", 1), data.get("site"))
+                else:
+                    result = self.server.search_client.search(data.get("query"), data.get("page", 1))
                 self._json(200, result.as_dict())
                 return
             if not isinstance(data.get("url"), str):
@@ -230,8 +263,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(202, {"id": job_id})
 
 
-def serve(port=0, *, open_browser=True):
-    with BrowserServer(port) as server:
+def serve(port=0, *, host="127.0.0.1", public_host=None, allowed_hosts=None, open_browser=True):
+    with BrowserServer(port, host=host, public_host=public_host, allowed_hosts=allowed_hosts) as server:
         print(f"Lit Rip is running at {server.origin}", flush=True)
         print("Keep this terminal open. Press Ctrl+C to stop.", flush=True)
         if open_browser:
