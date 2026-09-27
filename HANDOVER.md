@@ -106,11 +106,11 @@ python3 -m venv .venv
 .venv/bin/python -m pip check
 ```
 
-Latest verification in this working tree: `90 passed`, `pip check` clean, and `git diff --check` clean. Docker was not available on the development machine, so the image build itself still needs to be run on a Docker host. The portable `v0.2.3` bundle was built before the latest URL/series fix. Do not rebuild the portable bundle until development testing is complete.
+Latest verification in this working tree: `90 passed`, `pip check` clean, and `git diff --check` clean. The portable `v0.2.4` bundle is built from the current source.
 
 The Docker image is intended for a TrueNAS SCALE custom app. It does not write downloads to disk: prepared files are kept in memory and expire with the server. A local Docker installation can use `docker compose build && docker compose up -d`; a TrueNAS installation can use either a pushed registry image or a locally loaded image because the NAS YAML app definition references an image rather than this checkout's build context.
 
-A registry is not mandatory: build with Compose, run `docker save -o lit-rip-0.2.3.tar lit-rip:0.2.3`, copy the archive to the NAS, run `docker load -i lit-rip-0.2.3.tar`, and configure the custom app to use the local image with a never-pull policy. A registry is preferable for repeatable updates.
+A registry is not mandatory: build with Compose, run `docker save -o lit-rip-0.2.4.tar lit-rip:0.2.4`, copy the archive to the NAS, run `docker load -i lit-rip-0.2.4.tar`, and configure the custom app to use the local image with a never-pull policy. A registry is preferable for repeatable updates.
 
 Run the browser app with:
 
@@ -118,7 +118,7 @@ Run the browser app with:
 .venv/bin/lit-rip gui
 ```
 
-Before adding this file, the worktree was clean. The system interpreter on the review machine did not have `pytest`, so `python3 -m pytest -q` could not run (`No module named pytest`). This is an environment/setup issue, not a reported test failure. The previous portable release remains at `dist/lit-rip-linux-x86_64-v0.2.2.tar.gz`; the new `v0.2.3` archive is built after the version change.
+Before adding this file, the worktree was clean. The system interpreter on the review machine did not have `pytest`, so `python3 -m pytest -q` could not run (`No module named pytest`). This is an environment/setup issue, not a reported test failure. Previous portable releases remain in `dist/`; the current `v0.2.4` archive is built from the latest source.
 
 ## Keyword-search decision context
 

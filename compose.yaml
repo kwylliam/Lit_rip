@@ -2,7 +2,7 @@ services:
   lit-rip:
     build:
       context: .
-    image: lit-rip:0.2.3
+    image: lit-rip:0.2.4
     container_name: lit-rip
     restart: unless-stopped
     ports:

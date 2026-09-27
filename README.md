@@ -4,7 +4,7 @@ A small Python app with a browser interface and command-line tools that saves pu
 
 ## Portable Linux bundle
 
-The repository includes a [portable Linux archive](dist/lit-rip-linux-x86_64-v0.2.3.tar.gz) containing Python and all required packages. Transfer the archive to a compatible 64-bit Linux computer, extract it, and run the `launch-lit-rip.sh` inside the extracted bundle. You do not need to recreate a virtual environment on the destination. Keep the extracted folder together. The `launch-lit-rip.sh` at the source-project root is for a checkout with `.venv` or `.venv-desktop`; it is not the portable launcher. See [PORTABLE.md](PORTABLE.md) for the transfer steps and compatibility limits.
+The repository includes a [portable Linux archive](dist/lit-rip-linux-x86_64-v0.2.4.tar.gz) containing Python and all required packages. Transfer the archive to a compatible 64-bit Linux computer, extract it, and run the `launch-lit-rip.sh` inside the extracted bundle. You do not need to recreate a virtual environment on the destination. Keep the extracted folder together. The `launch-lit-rip.sh` at the source-project root is for a checkout with `.venv` or `.venv-desktop`; it is not the portable launcher. See [PORTABLE.md](PORTABLE.md) for the transfer steps and compatibility limits.
 
 To rebuild the archive after code changes on a 64-bit Linux system:
 
@@ -82,22 +82,22 @@ The Compose default allows any `Host` header because the service is normally rea
 TrueNAS SCALE can install custom OCI-container apps from its Apps interface, including through the **Install via YAML** Docker Compose editor. Build this image on a computer with Docker and push it to a registry your NAS can reach:
 
 ```sh
-docker build -t REGISTRY_USER/lit-rip:0.2.3 .
-docker push REGISTRY_USER/lit-rip:0.2.3
+docker build -t REGISTRY_USER/lit-rip:0.2.4 .
+docker push REGISTRY_USER/lit-rip:0.2.4
 ```
 
-In the TrueNAS YAML editor, replace the `build` section with `image: REGISTRY_USER/lit-rip:0.2.3`. Publish host port `9089` to container port `8899`, and retain the read-only filesystem, temporary `/tmp`, and health check settings. The NAS does not need the source checkout after the image is pushed.
+In the TrueNAS YAML editor, replace the `build` section with `image: REGISTRY_USER/lit-rip:0.2.4`. Publish host port `9089` to container port `8899`, and retain the read-only filesystem, temporary `/tmp`, and health check settings. The NAS does not need the source checkout after the image is pushed.
 
 A registry is optional. To transfer the image directly, build it with Compose, export it, copy the archive to the NAS, and load it there:
 
 ```sh
 docker compose build
-docker save -o lit-rip-0.2.3.tar lit-rip:0.2.3
-# copy lit-rip-0.2.3.tar to the NAS
-docker load -i lit-rip-0.2.3.tar
+docker save -o lit-rip-0.2.4.tar lit-rip:0.2.4
+# copy lit-rip-0.2.4.tar to the NAS
+docker load -i lit-rip-0.2.4.tar
 ```
 
-Then use the local image `lit-rip:0.2.3` in the TrueNAS custom-app settings and choose a **Never pull** policy. This is convenient for a one-off installation; a registry is more convenient when you want to publish updated images repeatedly.
+Then use the local image `lit-rip:0.2.4` in the TrueNAS custom-app settings and choose a **Never pull** policy. This is convenient for a one-off installation; a registry is more convenient when you want to publish updated images repeatedly.
 
 ## Desktop launcher on Linux
 
